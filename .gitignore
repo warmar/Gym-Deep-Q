@@ -1,3 +1,5 @@
 tensorboard/*
 .vscode/*
+cartpole/*
+flappy/*
 *-checkpoint.ipynb
