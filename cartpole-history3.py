@@ -1,3 +1,4 @@
+import os
 import gym
 import gym_ple
 import tensorflow as tf
@@ -13,14 +14,26 @@ HISTORY_MAX_SIZE = 500
 HISTORY_RAND_SAMPLE_SIZE = 50
 TRAIN = True
 
+# Create subfolder for each separate run
+if not os.path.exists(SAVE_DIR):
+    os.mkdir(SAVE_DIR)
+runs = os.listdir(SAVE_DIR)
+i = 0
+while str(i) in runs:
+    i += 1
+SAVE_DIR = SAVE_DIR + '%d/' % i
+
+# Set random seeds for consistency
 tf.set_random_seed(1)
 np.random.seed(1)
 
+# Create and reset environment
 env = gym.make(GYM_ENV)
 env.reset()
 image_shape = env.render(mode='rgb_array').shape
 
 
+# Define model functions
 def weight_variable(shape):
   initial = tf.truncated_normal(shape, stddev=0.1)
   return tf.Variable(initial)
