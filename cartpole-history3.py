@@ -9,8 +9,8 @@ SAVE_DIR = './cartpole/'
 LEARNING_RATE = 0.001
 REWARD_GAMMA = 0.95
 NUM_POSSIBLE_ACTIONS = 2
-RANDOM_ACTION_RATE = 100
-HISTORY_MAX_SIZE = 500
+RANDOM_ACTION_RATE = 1000
+HISTORY_MAX_SIZE = 10000
 HISTORY_RAND_SAMPLE_SIZE = 50
 TRAIN = True
 
@@ -44,8 +44,8 @@ def bias_variable(shape):
   return tf.Variable(initial)
 
 
-def conv2d(x, W):
-    return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+def conv2d(x, w, stride):
+    return tf.nn.conv2d(x, w, strides=[1, stride, stride, 1], padding='SAME')
 
 
 def max_pool_2x2(x):
@@ -58,7 +58,7 @@ def run():
     processed_images = tf.image.rgb_to_grayscale(raw_images)
 
     # Scale down
-    # processed_images = tf.image.resize_images(processed_images, [200, 200])
+    processed_images = tf.image.resize_images(processed_images, [100, 100])
 
     # Scale from [0,255] to [0,1]
     processed_images = tf.multiply(processed_images, (1 / 255))
@@ -67,22 +67,30 @@ def run():
     x_ = tf.placeholder(tf.float32, shape=[None, *(processed_images.shape[1:])])
     y_ = tf.placeholder(tf.float32, shape=[None, NUM_POSSIBLE_ACTIONS])
 
+    tf.summary.image('x_image', x_)
+
     num_channels = int(x_.shape[3])
 
     # Convolution + Pool Layer 1
     with tf.name_scope('conv-pool1'):
-        w1 = weight_variable([9, 9, num_channels, 10])
-        tf.summary.histogram('w1', w1)
-        conv1 = conv2d(x_, w1)
+        w_conv1 = weight_variable([8, 8, num_channels, 32])
+        b_conv1 = bias_variable([32])
+        tf.summary.histogram('w_conv1', w_conv1)
+        tf.summary.histogram('b_conv1', b_conv1)
+        conv1 = tf.nn.relu(conv2d(x_, w_conv1, 4) + b_conv1)
         pool1 = max_pool_2x2(conv1)
 
     # Convolution + Pool Layer 2
     with tf.name_scope('conv-pool2'):
-        w2 = weight_variable([9, 9, 10, 1])
-        tf.summary.histogram('w2', w2)
-        conv2 = conv2d(pool1, w2)
+        w_conv2 = weight_variable([4, 4, 32, 32])
+        b_conv2 = bias_variable([32])
+        tf.summary.histogram('w_conv2', w_conv2)
+        tf.summary.histogram('b_conv2', b_conv2)
+        tf.summary.histogram('w2', w_conv2)
+        conv2 = tf.nn.relu(conv2d(pool1, w_conv2, 4) + b_conv2)
         pool2 = max_pool_2x2(conv2)
 
+    # Flatten image
     num_image_pixels = 1
     for dimension in pool2.shape[1:]:
         num_image_pixels *= int(dimension)
@@ -90,10 +98,18 @@ def run():
 
     # Fully Connected Layer
     with tf.name_scope('fc1'):
-        w_fc1 = weight_variable([num_image_pixels, NUM_POSSIBLE_ACTIONS])
-        b_fc1 = bias_variable([NUM_POSSIBLE_ACTIONS])
-        tf.summary.histogram('w_dnn1', w_fc1)
-        output = tf.matmul(flattened, w_fc1) + b_fc1
+        w_fc1 = weight_variable([num_image_pixels, 512])
+        b_fc1 = bias_variable([512])
+        tf.summary.histogram('w_fc1', w_fc1)
+        tf.summary.histogram('b_fc1', b_fc1)
+        fc1 = tf.nn.relu(tf.matmul(flattened, w_fc1) + b_fc1)
+
+    with tf.name_scope('fc2'):
+        w_fc2 = weight_variable([512, NUM_POSSIBLE_ACTIONS])
+        b_fc2 = bias_variable([NUM_POSSIBLE_ACTIONS])
+        tf.summary.histogram('w_fc2', w_fc2)
+        tf.summary.histogram('b_fc2', b_fc2)
+        output = tf.matmul(fc1, w_fc2) + b_fc2
 
     # Define cost function
     cost = tf.reduce_mean(tf.square(output - y_))
