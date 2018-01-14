@@ -1,7 +1,10 @@
 import gym
+import gym_ple
 import tensorflow as tf
 import numpy as np
 
+GYM_ENV = 'FlappyBird-v0'
+SAVE_DIR = './flappy/'
 LEARNING_RATE = 0.001
 REWARD_GAMMA = 0.90
 NUM_ACTIONS = 2
@@ -10,8 +13,9 @@ RANDOM_ACTION_RATE = 100
 tf.set_random_seed(1)
 np.random.seed(1)
 
-env = gym.make('CartPole-v0')
+env = gym.make(GYM_ENV)
 env.reset()
+image_shape = env.render(mode='rgb_array').shape
 
 
 def weight_variable(shape):
@@ -33,7 +37,7 @@ def max_pool_2x2(x):
 
 
 def run():
-    x_ = tf.placeholder(tf.float32, shape=[None, 400, 600, 3])
+    x_ = tf.placeholder(tf.float32, shape=[None, *image_shape])
     y_ = tf.placeholder(tf.float32, shape=[None, NUM_ACTIONS])
 
     # tf.summary.image('image', image)
@@ -44,12 +48,14 @@ def run():
     # Create computation graph
     num_channels = int(x_.shape[3])
 
+    # Convolution + Pool Layer 1
     with tf.name_scope('conv-pool1'):
         w1 = weight_variable([5, 5, num_channels, 25])
         tf.summary.histogram('w1', w1)
         conv1 = conv2d(x_, w1)
         pool1 = max_pool_2x2(conv1)
 
+    # Convolution + Pool Layer 2
     with tf.name_scope('conv-pool2'):
         w2 = weight_variable([5, 5, 25, 1])
         tf.summary.histogram('w2', w2)
@@ -61,6 +67,7 @@ def run():
         num_image_pixels *= int(dimension)
     flattened = tf.reshape(pool2, [-1, num_image_pixels])
 
+    # Fully Connected Layer
     with tf.name_scope('fc1'):
         w_dnn1 = weight_variable([num_image_pixels, NUM_ACTIONS])
         b_dnn1 = bias_variable([NUM_ACTIONS])
@@ -81,7 +88,7 @@ def run():
     merged_summary = tf.summary.merge_all()
     saver = tf.train.Saver()
 
-    summary_writer = tf.summary.FileWriter('cartpole/', sess.graph)
+    summary_writer = tf.summary.FileWriter(SAVE_DIR, sess.graph)
 
     next_state = env.render(mode='rgb_array')
     for _ in range(1000000):
@@ -127,7 +134,7 @@ def run():
 
         # Save variables
         if _ % 1000 == 0:
-            saver.save(sess, './cartpole/saves/save.chkp')
+            saver.save(sess, SAVE_DIR + 'saves/save.chkp')
 
         env.render(mode='human')
 
