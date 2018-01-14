@@ -127,7 +127,11 @@ def run():
 
         if TRAIN:
             # Update histories
-            transition = (curr_state, action, reward, next_state)
+            if not done:
+                transition = [curr_state, action, reward, next_state]
+            else:
+                transition = [curr_state, action, reward, None]
+
             if history_d is not None:
                 history_d = np.vstack((history_d, [transition]))
             else:
@@ -142,12 +146,15 @@ def run():
             train_states = np.array([history_d[i][0] for i in sample_indices])
             train_y = sess.run(output, feed_dict={x_: train_states})
 
-            next_states = np.array([history_d[i][3] for i in sample_indices])
-            next_predictions = sess.run(output, feed_dict={x_: next_states})
+            # next_states = np.array([history_d[i][3] for i in sample_indices])
+            # next_predictions = sess.run(output, feed_dict={x_: next_states})
             for i, sample_index in enumerate(sample_indices):
                 # y[i][action] = reward[i] + gamma*q(i+1)
-                train_y[i][history_d[sample_index][1]] = history_d[sample_index][2] + REWARD_GAMMA*max(next_predictions[i])
+                train_y[i][history_d[sample_index][1]] = history_d[sample_index][2]
 
+                if history_d[sample_index][3] is not None:
+                    next_prediction = sess.run(output, feed_dict={x_: [history_d[sample_index][3]]})[0]
+                    train_y[i][history_d[sample_index][1]] += history_d[sample_index][2] + REWARD_GAMMA*max(next_prediction)
 
             # DEBUG INFO:
             # print('predictions: ', predictions)
@@ -179,6 +186,5 @@ def run():
         if done:
             env.reset()
             score = 0
-
 
 run()
