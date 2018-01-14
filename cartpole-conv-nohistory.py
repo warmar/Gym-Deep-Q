@@ -1,12 +1,11 @@
-import time
 import gym
-import gym_ple
 import tensorflow as tf
 import numpy as np
 
 LEARNING_RATE = 0.001
 REWARD_GAMMA = 0.90
 NUM_ACTIONS = 2
+RANDOM_ACTION_RATE = 100
 
 tf.set_random_seed(1)
 np.random.seed(1)
@@ -14,11 +13,14 @@ np.random.seed(1)
 env = gym.make('CartPole-v0')
 env.reset()
 
+
 def conv2d(x, W):
     return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
 
+
 def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+
 
 def run():
     x_ = tf.placeholder(tf.float32, shape=[400, 600, 3])
@@ -35,12 +37,12 @@ def run():
     # Create computation graph
     num_channels = int(image.shape[3])
 
-    w1 = tf.Variable(tf.truncated_normal([5, 5, num_channels, 10], stddev=0.1))
+    w1 = tf.Variable(tf.truncated_normal([5, 5, num_channels, 25], stddev=0.1))
     tf.summary.histogram('w1', w1)
     conv1 = conv2d(image, w1)
     pool1 = max_pool_2x2(conv1)
 
-    w2 = tf.Variable(tf.truncated_normal([5, 5, 10, 1], stddev=0.1))
+    w2 = tf.Variable(tf.truncated_normal([5, 5, 25, 1], stddev=0.1))
     tf.summary.histogram('w2', w2)
     conv2 = conv2d(pool1, w2)
     pool2 = max_pool_2x2(conv2)
@@ -52,8 +54,7 @@ def run():
 
     w_dnn1 = tf.Variable(tf.truncated_normal([num_image_pixels, NUM_ACTIONS], stddev=0.1))
     tf.summary.histogram('w_dnn1', w_dnn1)
-    b_dnn1 = tf.Variable(tf.constant(0.1))
-    # output = tf.tanh(tf.matmul(flattened, w_dnn1) + b_dnn1)
+    b_dnn1 = tf.Variable(tf.constant(0.1))    
     output = tf.matmul(flattened, w_dnn1) + b_dnn1
 
     output = tf.reshape(output, [NUM_ACTIONS])
@@ -83,9 +84,9 @@ def run():
         predictions = sess.run(output, feed_dict={x_: curr_state})
 
         action = None
-        random_chance = 1/((_/1000)+2) # Start random chance at 0.5 and slowly decrease
+        random_chance = 1/((_/RANDOM_ACTION_RATE)+2)  # Start random chance at 0.5 and slowly decrease
         if np.random.random_sample() < random_chance:
-            action = np.random.choice([0, 1]) # Occationally pick random action
+            action = np.random.choice([0, 1])  # Occationally pick random action
         else:
             action = 0 if predictions[0] > predictions[1] else 1 # Big action with biggest predicted reward
 
@@ -124,5 +125,6 @@ def run():
 
         if done:
             env.reset()
+
 
 run()
