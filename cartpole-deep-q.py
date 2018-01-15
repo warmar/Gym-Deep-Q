@@ -13,11 +13,13 @@ NUM_POSSIBLE_ACTIONS = 2
 PRELIMINARY_RANDOM_ACTIONS = 10000
 RANDOM_ACTION_START_RATE = 0.1
 RANDOM_ACTION_END_RATE = 0.001
-TOTAL_STEPS = 1000000
+TOTAL_STEPS = 5000000
 HISTORY_MAX_SIZE = 50000
 HISTORY_RAND_SAMPLE_SIZE = 50
-RENDER = True
+RENDER = False
 TRAIN = True
+RESUME_SUB_DIR = None
+RESUME_STEP = 0
 
 # Create subfolder for each separate run
 if not os.path.exists(SAVE_DIR):
@@ -26,7 +28,11 @@ runs = os.listdir(SAVE_DIR)
 i = 0
 while str(i) in runs:
     i += 1
-SAVE_DIR = SAVE_DIR + '%d/' % i
+SAVE_SUBDIR = '%d/' % i
+
+# If resuming, use RESUME_DIR
+if RESUME_SUB_DIR is not None:
+    SAVE_SUBDIR = RESUME_SUB_DIR
 
 # Set random seeds for consistency
 tf.set_random_seed(1)
@@ -136,10 +142,9 @@ def run():
     # Create Summary Writer
     merged_summary = tf.summary.merge_all()
     saver = tf.train.Saver()
-    if not TRAIN:
-        saver.restore(sess, SAVE_DIR + 'saves/save.chkp')
-    else:
-        summary_writer = tf.summary.FileWriter(SAVE_DIR, sess.graph)
+    if RESUME_SUB_DIR is not None:
+        saver.restore(sess, SAVE_DIR + RESUME_SUB_DIR + 'saves/save.chkp')
+    summary_writer = tf.summary.FileWriter(SAVE_DIR + SAVE_SUBDIR, sess.graph)
 
     # --- Run Model ---
     history_d = None
@@ -148,7 +153,7 @@ def run():
     score = 0
     next_state = env.render(mode='rgb_array')  # Allows us to render the screen only once per step
     next_state = sess.run(processed_images, feed_dict={raw_images: [next_state]})[0]
-    for step in range(TOTAL_STEPS):
+    for step in range(RESUME_STEP, TOTAL_STEPS):
         # Get current screen array
         curr_state = next_state
 
@@ -245,7 +250,7 @@ def run():
 
             # Save variables
             if step % 1000 == 0:
-                saver.save(sess, SAVE_DIR + 'saves/save.chkp')
+                saver.save(sess, SAVE_DIR + SAVE_SUBDIR + 'saves/save.chkp', global_step=step)
 
         # Indicators
         if RENDER:
