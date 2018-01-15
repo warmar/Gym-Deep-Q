@@ -11,7 +11,9 @@ ACTIVATION_FUNCTION = tf.nn.relu
 REWARD_GAMMA = 0.95
 NUM_POSSIBLE_ACTIONS = 2
 PRELIMINARY_RANDOM_ACTIONS = 10000
-RANDOM_ACTION_RATE = 100
+RANDOM_ACTION_START_RATE = 0.1
+RANDOM_ACTION_END_RATE = 0.001
+TOTAL_STEPS = 1000000
 HISTORY_MAX_SIZE = 50000
 HISTORY_RAND_SAMPLE_SIZE = 50
 RENDER = True
@@ -74,7 +76,7 @@ def run():
 
     num_channels = int(x_.shape[3])
 
-    # Convolution + Pool Layer 1
+    # Convolutional Layers
     with tf.name_scope('conv-pool1'):
         w_conv1 = weight_variable([8, 8, num_channels, 32])
         b_conv1 = bias_variable([32])
@@ -83,7 +85,6 @@ def run():
         conv1 = ACTIVATION_FUNCTION(conv2d(x_, w_conv1, 4) + b_conv1)
         # pool1 = max_pool_2x2(conv1)
 
-    # Convolution + Pool Layer 2
     with tf.name_scope('conv-pool2'):
         w_conv2 = weight_variable([4, 4, 32, 64])
         b_conv2 = bias_variable([64])
@@ -106,7 +107,7 @@ def run():
         num_image_pixels *= int(dimension)
     flattened = tf.reshape(conv3, [-1, num_image_pixels])
 
-    # Fully Connected Layer
+    # Fully Connected Layers
     with tf.name_scope('fc1'):
         w_fc1 = weight_variable([num_image_pixels, 512])
         b_fc1 = bias_variable([512])
@@ -128,10 +129,11 @@ def run():
     # Define train step
     train = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cost)
 
-    # Run model
+    # Initialize Computation Graph
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
 
+    # Create Summary Writer
     merged_summary = tf.summary.merge_all()
     saver = tf.train.Saver()
     if not TRAIN:
@@ -139,13 +141,14 @@ def run():
     else:
         summary_writer = tf.summary.FileWriter(SAVE_DIR, sess.graph)
 
+    # --- Run Model ---
     history_d = None
     last_four_frames = []
 
     score = 0
     next_state = env.render(mode='rgb_array')  # Allows us to render the screen only once per step
     next_state = sess.run(processed_images, feed_dict={raw_images: [next_state]})[0]
-    for step in range(1000000):
+    for step in range(TOTAL_STEPS):
         # Get current screen array
         curr_state = next_state
 
@@ -164,9 +167,11 @@ def run():
         curr_state_representation_frames = last_four_frames[:]
         curr_state_representation = np.dstack(curr_state_representation_frames)
 
-        # Determine next action
+        # --- Determine next action ---
         action = None
-        random_chance = 1 / ((step / RANDOM_ACTION_RATE) + 2)  # Start random chance at 0.5 and slowly decrease
+        # Linearly scale chance of picking a random action
+        random_chance = RANDOM_ACTION_START_RATE + (RANDOM_ACTION_END_RATE - RANDOM_ACTION_START_RATE) * (step / TOTAL_STEPS)
+
         # First populate replay history with random actions, then occationally pick random action
         if ((step < PRELIMINARY_RANDOM_ACTIONS) or
                 (np.random.random_sample() < random_chance)):
