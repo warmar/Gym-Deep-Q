@@ -64,10 +64,10 @@ def run():
 
     for _ in range(1000000):
         # Get current screen array
-        state = env.render(mode='rgb_array')        
+        curr_state = env.render(mode='rgb_array')        
         
         # Determine next action
-        prediction = sess.run(output, feed_dict={x_: [state]})[0]
+        prediction = sess.run(output, feed_dict={x_: [curr_state]})[0]
         action = None
         if np.random.random_sample() < RANDOM_ACTION_CHANCE:
             action = np.random.choice([0, 1]) # Occationally pick random action
@@ -76,9 +76,10 @@ def run():
 
         # Perform Action
         observation, reward, done, info = env.step(action)
+        next_state = observation
 
         # Keep history of states
-        state_history = np.array([*state_history, state][-PREVIOUS_ACTION_MEMORY:])
+        state_history = np.array([*state_history, curr_state][-PREVIOUS_ACTION_MEMORY:])
         action_history = np.array([*action_history, action][-PREVIOUS_ACTION_MEMORY:])
         reward_history = np.array([*reward_history, reward][-PREVIOUS_ACTION_MEMORY:])
 
