@@ -81,23 +81,30 @@ def run():
         tf.summary.histogram('w_conv1', w_conv1)
         tf.summary.histogram('b_conv1', b_conv1)
         conv1 = ACTIVATION_FUNCTION(conv2d(x_, w_conv1, 4) + b_conv1)
-        pool1 = max_pool_2x2(conv1)
+        # pool1 = max_pool_2x2(conv1)
 
     # Convolution + Pool Layer 2
     with tf.name_scope('conv-pool2'):
-        w_conv2 = weight_variable([4, 4, 32, 32])
-        b_conv2 = bias_variable([32])
+        w_conv2 = weight_variable([4, 4, 32, 64])
+        b_conv2 = bias_variable([64])
         tf.summary.histogram('w_conv2', w_conv2)
         tf.summary.histogram('b_conv2', b_conv2)
-        tf.summary.histogram('w2', w_conv2)
-        conv2 = ACTIVATION_FUNCTION(conv2d(pool1, w_conv2, 4) + b_conv2)
-        pool2 = max_pool_2x2(conv2)
+        conv2 = ACTIVATION_FUNCTION(conv2d(conv1, w_conv2, 2) + b_conv2)
+        # pool2 = max_pool_2x2(conv2)
+
+    with tf.name_scope('conv-pool3'):
+        w_conv3 = weight_variable([3, 3, 64, 64])
+        b_conv3 = bias_variable([64])
+        tf.summary.histogram('w_conv3', w_conv3)
+        tf.summary.histogram('b_conv3', b_conv3)
+        conv3 = ACTIVATION_FUNCTION(conv2d(conv2, w_conv3, 1) + b_conv3)
+        # pool3 = max_pool_2x2(conv2)
 
     # Flatten image
     num_image_pixels = 1
-    for dimension in pool2.shape[1:]:
+    for dimension in conv3.shape[1:]:
         num_image_pixels *= int(dimension)
-    flattened = tf.reshape(pool2, [-1, num_image_pixels])
+    flattened = tf.reshape(conv3, [-1, num_image_pixels])
 
     # Fully Connected Layer
     with tf.name_scope('fc1'):
