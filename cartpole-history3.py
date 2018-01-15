@@ -6,12 +6,15 @@ import numpy as np
 
 GYM_ENV = 'CartPole-v0'
 SAVE_DIR = './cartpole/'
-LEARNING_RATE = 0.001
+LEARNING_RATE = 1e-6
+ACTIVATION_FUNCTION = tf.nn.relu
 REWARD_GAMMA = 0.95
 NUM_POSSIBLE_ACTIONS = 2
-RANDOM_ACTION_RATE = 1000
-HISTORY_MAX_SIZE = 10000
+PRELIMINARY_RANDOM_ACTIONS = 10000
+RANDOM_ACTION_RATE = 100
+HISTORY_MAX_SIZE = 50000
 HISTORY_RAND_SAMPLE_SIZE = 50
+RENDER = True
 TRAIN = True
 
 # Create subfolder for each separate run
@@ -54,14 +57,15 @@ def max_pool_2x2(x):
 
 def run():
     raw_images = tf.placeholder(tf.float32, shape=[None, *image_shape])
+    # Scale from [0,255] to [0,1]
+    processed_images = tf.multiply(raw_images, (1 / 255))
+
     # Convert to grayscale
-    processed_images = tf.image.rgb_to_grayscale(raw_images)
+    processed_images = tf.image.rgb_to_grayscale(processed_images)
 
     # Scale down
-    processed_images = tf.image.resize_images(processed_images, [100, 100])
+    processed_images = tf.image.resize_images(processed_images, [300, 300])
 
-    # Scale from [0,255] to [0,1]
-    processed_images = tf.multiply(processed_images, (1 / 255))
 
     # Create computation graph
     x_ = tf.placeholder(tf.float32, shape=[None, *(processed_images.shape[1:])])
@@ -77,7 +81,7 @@ def run():
         b_conv1 = bias_variable([32])
         tf.summary.histogram('w_conv1', w_conv1)
         tf.summary.histogram('b_conv1', b_conv1)
-        conv1 = tf.nn.relu(conv2d(x_, w_conv1, 4) + b_conv1)
+        conv1 = ACTIVATION_FUNCTION(conv2d(x_, w_conv1, 4) + b_conv1)
         pool1 = max_pool_2x2(conv1)
 
     # Convolution + Pool Layer 2
@@ -87,7 +91,7 @@ def run():
         tf.summary.histogram('w_conv2', w_conv2)
         tf.summary.histogram('b_conv2', b_conv2)
         tf.summary.histogram('w2', w_conv2)
-        conv2 = tf.nn.relu(conv2d(pool1, w_conv2, 4) + b_conv2)
+        conv2 = ACTIVATION_FUNCTION(conv2d(pool1, w_conv2, 4) + b_conv2)
         pool2 = max_pool_2x2(conv2)
 
     # Flatten image
@@ -102,7 +106,7 @@ def run():
         b_fc1 = bias_variable([512])
         tf.summary.histogram('w_fc1', w_fc1)
         tf.summary.histogram('b_fc1', b_fc1)
-        fc1 = tf.nn.relu(tf.matmul(flattened, w_fc1) + b_fc1)
+        fc1 = ACTIVATION_FUNCTION(tf.matmul(flattened, w_fc1) + b_fc1)
 
     with tf.name_scope('fc2'):
         w_fc2 = weight_variable([512, NUM_POSSIBLE_ACTIONS])
@@ -134,18 +138,19 @@ def run():
     score = 0
     next_state = env.render(mode='rgb_array')  # Allows us to render the screen only once per step
     next_state = sess.run(processed_images, feed_dict={raw_images: [next_state]})[0]
-    for _ in range(1000000):
+    for step in range(1000000):
         # Get current screen array
         curr_state = next_state
 
         # Determine next action
-        predictions = sess.run(output, feed_dict={x_: [curr_state]})[0]
-
         action = None
-        random_chance = 1 / ((_ / RANDOM_ACTION_RATE) + 2)  # Start random chance at 0.5 and slowly decrease
-        if np.random.random_sample() < random_chance:
-            action = np.random.choice([0, 1])  # Occationally pick random action
+        random_chance = 1 / ((step / RANDOM_ACTION_RATE) + 2)  # Start random chance at 0.5 and slowly decrease
+        # First populate replay history with random actions, then occationally pick random action
+        if ((step < PRELIMINARY_RANDOM_ACTIONS) or
+                (np.random.random_sample() < random_chance)):
+            action = np.random.choice([0, 1])
         else:
+            predictions = sess.run(output, feed_dict={x_: [curr_state]})[0]
             action = 0 if predictions[0] > predictions[1] else 1  # Big action with biggest predicted reward
 
         # Perform Action
@@ -154,20 +159,21 @@ def run():
         next_state = sess.run(processed_images, feed_dict={raw_images: [next_state]})[0]
         score += reward
 
-        if TRAIN:
-            # Update histories
-            if not done:
-                transition = [curr_state, action, reward, next_state]
-            else:
-                transition = [curr_state, action, reward, None]
+        # Update history
+        if not done:
+            transition = [curr_state, action, reward, next_state]
+        else:
+            transition = [curr_state, action, reward, None]
 
-            if history_d is not None:
-                history_d = np.vstack((history_d, [transition]))
-            else:
-                history_d = np.array([transition])
+        if history_d is not None:
+            history_d = np.vstack((history_d, [transition]))
+        else:
+            history_d = np.array([transition])
 
-            history_d = history_d[-HISTORY_MAX_SIZE:]
+        history_d = history_d[-HISTORY_MAX_SIZE:]
 
+        # Train
+        if TRAIN and step >= PRELIMINARY_RANDOM_ACTIONS:
             # Calculate rewards for random sample of transitions from history
             history_size = len(history_d)
             sample_indices = np.random.choice(range(history_size), HISTORY_RAND_SAMPLE_SIZE)
@@ -187,7 +193,7 @@ def run():
 
             # DEBUG INFO:
             # print('predictions: ', predictions)
-            print('y: ', train_y)
+            # print('y: ', train_y)
             # print('action: ', action)
             # print('reward: ', reward)
             # print('Cost: ', sess.run(cost, feed_dict={x_: state_history, y_: y}))
@@ -196,22 +202,27 @@ def run():
             sess.run(train, feed_dict={x_: train_states, y_: train_y})
 
             # Add summary values
-            if _ % 5 == 0:
+            if step % 5 == 0:
                 summary = sess.run(merged_summary, feed_dict={x_: train_states, y_: train_y})
-                summary_writer.add_summary(summary, global_step=_)
+                summary_writer.add_summary(summary, global_step=step)
 
             if done:
                 summary = tf.Summary(value=[
                     tf.Summary.Value(tag="score", simple_value=score),
                 ])
-                summary_writer.add_summary(summary, global_step=_)
+                summary_writer.add_summary(summary, global_step=step)
 
             # Save variables
-            if _ % 1000 == 0:
+            if step % 1000 == 0:
                 saver.save(sess, SAVE_DIR + 'saves/save.chkp')
 
-        env.render(mode='human')
+        # Indicators
+        if RENDER:
+            env.render(mode='human')
+        if step % 100 == 0:
+            print('Step: ', step)
 
+        # Reset if done
         if done:
             env.reset()
             score = 0
