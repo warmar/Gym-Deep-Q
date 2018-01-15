@@ -19,7 +19,6 @@ HISTORY_RAND_SAMPLE_SIZE = 50
 RENDER = False
 TRAIN = True
 RESUME_SUB_DIR = None
-RESUME_STEP = 0
 
 # Create subfolder for each separate run
 if not os.path.exists(SAVE_DIR):
@@ -135,6 +134,10 @@ def run():
     # Define train step
     train = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cost)
 
+    # Define global_step variable
+    global_step = tf.Variable(0, trainable=False, name='step')
+    increment_global_step = tf.assign_add(global_step, 1)
+
     # Initialize Computation Graph
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
@@ -153,7 +156,9 @@ def run():
     score = 0
     next_state = env.render(mode='rgb_array')  # Allows us to render the screen only once per step
     next_state = sess.run(processed_images, feed_dict={raw_images: [next_state]})[0]
-    for step in range(RESUME_STEP, TOTAL_STEPS):
+    while global_step.eval(sess) < TOTAL_STEPS:
+        sess.run(increment_global_step)
+
         # Get current screen array
         curr_state = next_state
 
@@ -175,10 +180,10 @@ def run():
         # --- Determine next action ---
         action = None
         # Linearly scale chance of picking a random action
-        random_chance = RANDOM_ACTION_START_RATE + (RANDOM_ACTION_END_RATE - RANDOM_ACTION_START_RATE) * (step / TOTAL_STEPS)
+        random_chance = RANDOM_ACTION_START_RATE + (RANDOM_ACTION_END_RATE - RANDOM_ACTION_START_RATE) * (global_step.eval(sess) / TOTAL_STEPS)
 
         # First populate replay history with random actions, then occationally pick random action
-        if ((step < PRELIMINARY_RANDOM_ACTIONS) or
+        if ((global_step.eval(sess) < PRELIMINARY_RANDOM_ACTIONS) or
                 (np.random.random_sample() < random_chance)):
             action = np.random.choice([0, 1])
         else:
@@ -209,7 +214,7 @@ def run():
         history_d = history_d[-HISTORY_MAX_SIZE:]
 
         # Train
-        if TRAIN and step >= PRELIMINARY_RANDOM_ACTIONS:
+        if TRAIN and global_step.eval(sess) >= PRELIMINARY_RANDOM_ACTIONS:
             # Calculate rewards for random sample of transitions from history
             history_size = len(history_d)
             sample_indices = np.random.choice(range(history_size), HISTORY_RAND_SAMPLE_SIZE)
@@ -238,30 +243,31 @@ def run():
             sess.run(train, feed_dict={x_: train_states, y_: train_y})
 
             # Add summary values
-            if step % 5 == 0:
+            if global_step.eval(sess) % 5 == 0:
                 summary = sess.run(merged_summary, feed_dict={x_: train_states, y_: train_y})
-                summary_writer.add_summary(summary, global_step=step)
+                summary_writer.add_summary(summary, global_step=global_step.eval(sess))
 
             if done:
                 summary = tf.Summary(value=[
                     tf.Summary.Value(tag="score", simple_value=score),
                 ])
-                summary_writer.add_summary(summary, global_step=step)
+                summary_writer.add_summary(summary, global_step=global_step.eval(sess))
 
             # Save variables
-            if step % 1000 == 0:
-                saver.save(sess, SAVE_DIR + SAVE_SUBDIR + 'saves/save.chkp', global_step=step)
+            if global_step.eval(sess) % 100 == 0:
+                saver.save(sess, SAVE_DIR + SAVE_SUBDIR + 'saves/save.chkp')
 
         # Indicators
         if RENDER:
             env.render(mode='human')
-        if step % 100 == 0:
-            print('Step: ', step)
+        if global_step.eval(sess) % 100 == 0:
+            print('Step: ', global_step.eval(sess))
 
         # Reset if done
         if done:
             env.reset()
             last_four_frames = []
             score = 0
+
 
 run()
