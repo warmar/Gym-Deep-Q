@@ -64,11 +64,10 @@ def run():
     processed_images = tf.image.rgb_to_grayscale(processed_images)
 
     # Scale down
-    processed_images = tf.image.resize_images(processed_images, [300, 300])
-
+    processed_images = tf.image.resize_images(processed_images, [100, 100])
 
     # Create computation graph
-    x_ = tf.placeholder(tf.float32, shape=[None, *(processed_images.shape[1:])])
+    x_ = tf.placeholder(tf.float32, shape=[None, *(processed_images.shape[1:3]), 4])
     y_ = tf.placeholder(tf.float32, shape=[None, NUM_POSSIBLE_ACTIONS])
 
     tf.summary.image('x_image', x_)
@@ -134,6 +133,7 @@ def run():
         summary_writer = tf.summary.FileWriter(SAVE_DIR, sess.graph)
 
     history_d = None
+    last_four_frames = []
 
     score = 0
     next_state = env.render(mode='rgb_array')  # Allows us to render the screen only once per step
@@ -141,6 +141,21 @@ def run():
     for step in range(1000000):
         # Get current screen array
         curr_state = next_state
+
+        # Create state representation with current frame and previous three frames
+        last_four_frames.append(curr_state)
+
+        if len(last_four_frames) > 4:
+            del last_four_frames[0]
+
+        # Populate last four frames with first frame if length < 4
+        if len(last_four_frames) < 4:
+            for _ in range(4 - len(last_four_frames)):
+                last_four_frames.insert(0, last_four_frames[0])
+
+        # Convert frames to 4-dimensional image
+        curr_state_representation_frames = last_four_frames[:]
+        curr_state_representation = np.dstack(curr_state_representation_frames)
 
         # Determine next action
         action = None
@@ -150,7 +165,7 @@ def run():
                 (np.random.random_sample() < random_chance)):
             action = np.random.choice([0, 1])
         else:
-            predictions = sess.run(output, feed_dict={x_: [curr_state]})[0]
+            predictions = sess.run(output, feed_dict={x_: [curr_state_representation]})[0]
             action = 0 if predictions[0] > predictions[1] else 1  # Big action with biggest predicted reward
 
         # Perform Action
@@ -159,11 +174,15 @@ def run():
         next_state = sess.run(processed_images, feed_dict={raw_images: [next_state]})[0]
         score += reward
 
+        # Create next state representation
+        next_state_representation_frames = [*last_four_frames[1:], next_state]
+        next_state_representation = np.dstack(next_state_representation_frames)
+
         # Update history
         if not done:
-            transition = [curr_state, action, reward, next_state]
+            transition = [curr_state_representation, action, reward, next_state_representation]
         else:
-            transition = [curr_state, action, reward, None]
+            transition = [curr_state_representation, action, reward, None]
 
         if history_d is not None:
             history_d = np.vstack((history_d, [transition]))
@@ -225,6 +244,7 @@ def run():
         # Reset if done
         if done:
             env.reset()
+            last_four_frames = []
             score = 0
 
 run()
