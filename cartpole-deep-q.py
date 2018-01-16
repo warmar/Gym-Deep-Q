@@ -186,13 +186,13 @@ def run():
         # Linearly scale chance of picking a random action
         random_chance = RANDOM_ACTION_START_RATE + (RANDOM_ACTION_END_RATE - RANDOM_ACTION_START_RATE) * (global_step.eval(sess) / TOTAL_STEPS)
 
-        # First populate replay history with random actions, then occationally pick random action
+        # First populate replay history with random actions, then occasionally pick random action
         if ((global_step.eval(sess) < PRELIMINARY_RANDOM_ACTIONS) or
                 (np.random.random_sample() < random_chance)):
             action = np.random.choice([0, 1])
         else:
             predictions = sess.run(output, feed_dict={x_: [curr_state_representation]})[0]
-            action = 0 if predictions[0] > predictions[1] else 1  # Big action with biggest predicted reward
+            action = 0 if predictions[0] > predictions[1] else 1  # Pick action with biggest predicted reward
 
         # Perform Action
         observation, reward, done, info = env.step(action)
@@ -205,10 +205,7 @@ def run():
         next_state_representation = np.dstack(next_state_representation_frames)
 
         # Update history
-        if not done:
-            transition = [curr_state_representation, action, reward, next_state_representation]
-        else:
-            transition = [curr_state_representation, action, reward, None]
+        transition = [curr_state_representation, action, reward, next_state_representation, done]
 
         if history_d is not None:
             history_d = np.vstack((history_d, [transition]))
@@ -220,21 +217,26 @@ def run():
         # Train
         if TRAIN and global_step.eval(sess) >= PRELIMINARY_RANDOM_ACTIONS:
             # Calculate rewards for random sample of transitions from history
+            # Get random sample
             history_size = len(history_d)
             sample_indices = np.random.choice(range(history_size), HISTORY_RAND_SAMPLE_SIZE)
+            sample_transitions = np.take(history_d, sample_indices, axis=0)
 
-            train_states = np.array([history_d[i][0] for i in sample_indices])
+            # Get each value in transitions
+            train_states = [sample_transition[0] for sample_transition in sample_transitions]
+            actions = [sample_transition[1] for sample_transition in sample_transitions]
+            rewards = [sample_transition[2] for sample_transition in sample_transitions]
+            next_states = [sample_transition[3] for sample_transition in sample_transitions]
+            terminal = [sample_transition[4] for sample_transition in sample_transitions]
+
+            # Calculate rewards
             train_y = sess.run(output, feed_dict={x_: train_states})
+            next_predictions = sess.run(output, feed_dict={x_: next_states})
+            for i in range(HISTORY_RAND_SAMPLE_SIZE):
+                train_y[i][actions[i]] = rewards[i]
 
-            # next_states = np.array([history_d[i][3] for i in sample_indices])
-            # next_predictions = sess.run(output, feed_dict={x_: next_states})
-            for i, sample_index in enumerate(sample_indices):
-                # y[i][action] = reward[i] + gamma*q(i+1)
-                train_y[i][history_d[sample_index][1]] = history_d[sample_index][2]
-
-                if history_d[sample_index][3] is not None:
-                    next_prediction = sess.run(output, feed_dict={x_: [history_d[sample_index][3]]})[0]
-                    train_y[i][history_d[sample_index][1]] += history_d[sample_index][2] + REWARD_GAMMA*max(next_prediction)
+                if not terminal[i]:
+                    train_y[i][actions[i]] += REWARD_GAMMA*max(next_predictions[i])
 
             # DEBUG INFO:
             # print('predictions: ', predictions)
