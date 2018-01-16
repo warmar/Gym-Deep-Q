@@ -131,6 +131,10 @@ def run():
     cost = tf.reduce_mean(tf.square(output - y_))
     tf.summary.scalar('cost', cost)
 
+    # Define average Q metric
+    avg_q = tf.reduce_mean(output)
+    tf.summary.scalar('avg_q', avg_q)
+
     # Define train step
     train = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cost)
 
@@ -149,7 +153,7 @@ def run():
         saver.restore(sess, SAVE_DIR + RESUME_SUB_DIR + 'saves/save.chkp')
     summary_writer = tf.summary.FileWriter(SAVE_DIR + SAVE_SUBDIR, sess.graph)
 
-    # --- Run Model ---
+    # Run Model
     history_d = None
     last_four_frames = []
 
