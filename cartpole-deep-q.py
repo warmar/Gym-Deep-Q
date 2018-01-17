@@ -1,4 +1,5 @@
 import os
+from collections import deque
 import gym
 import gym_ple
 import tensorflow as tf
@@ -154,8 +155,7 @@ def run():
     summary_writer = tf.summary.FileWriter(SAVE_DIR + SAVE_SUBDIR, sess.graph)
 
     # Run Model
-    history_d = None
-    last_four_frames = []
+    history_d = deque([[None, None, None, True]])  # Start with a single terminal transition
 
     score = 0
     next_state = env.render(mode='rgb_array')  # Allows us to render the screen only once per step
@@ -167,67 +167,86 @@ def run():
         curr_state = next_state
 
         # Create state representation with current frame and previous three frames
-        last_four_frames.append(curr_state)
-
-        if len(last_four_frames) > 4:
-            del last_four_frames[0]
-
-        # Populate last four frames with first frame if length < 4
-        if len(last_four_frames) < 4:
-            for _ in range(4 - len(last_four_frames)):
-                last_four_frames.insert(0, last_four_frames[0])
+        curr_four_frames = [curr_state]
+        for i in [-1, -2, -3]:
+            transition_i = history_d[i]
+            if transition_i[3]:  # Previous state was terminal; do not use; pad with last input frame
+                for _ in range(4-len(curr_four_frames)):
+                    curr_four_frames.insert(0, curr_four_frames[0])
+                break
+            transition_state = transition_i[0]
+            curr_four_frames.insert(0, transition_state)
 
         # Convert frames to 4-dimensional image
-        curr_state_representation_frames = last_four_frames[:]
-        curr_state_representation = np.dstack(curr_state_representation_frames)
+        curr_state_representation = np.dstack(curr_four_frames)
 
         # --- Determine next action ---
         action = None
         # Linearly scale chance of picking a random action
         random_chance = RANDOM_ACTION_START_RATE + (RANDOM_ACTION_END_RATE - RANDOM_ACTION_START_RATE) * (global_step.eval(sess) / TOTAL_STEPS)
 
-        # First populate replay history with random actions, then occasionally pick random action
+        # Pick random action if still in preliminary building replay memory stage, then occasionally after
         if ((global_step.eval(sess) < PRELIMINARY_RANDOM_ACTIONS) or
                 (np.random.random_sample() < random_chance)):
             action = np.random.choice([0, 1])
-        else:
+        else:  # Otherwise pick action with highest predicted reward based on Q function
             predictions = sess.run(output, feed_dict={x_: [curr_state_representation]})[0]
             action = 0 if predictions[0] > predictions[1] else 1  # Pick action with biggest predicted reward
 
         # Perform Action
         observation, reward, done, info = env.step(action)
-        next_state = env.render(mode='rgb_array')
-        next_state = sess.run(processed_images, feed_dict={raw_images: [next_state]})[0]
         score += reward
 
-        # Create next state representation
-        next_state_representation_frames = [*last_four_frames[1:], next_state]
-        next_state_representation = np.dstack(next_state_representation_frames)
+        # Pre-process next frame
+        next_state = env.render(mode='rgb_array')
+        next_state = sess.run(processed_images, feed_dict={raw_images: [next_state]})[0]
 
         # Update history
-        transition = [curr_state_representation, action, reward, next_state_representation, done]
+        transition = [curr_state, action, reward, done]
 
-        if history_d is not None:
-            history_d = np.vstack((history_d, [transition]))
-        else:
-            history_d = np.array([transition])
-
-        history_d = history_d[-HISTORY_MAX_SIZE:]
+        history_d.append(transition)
+        if len(history_d) > HISTORY_MAX_SIZE+3:
+            history_d.popleft()
 
         # Train
         if TRAIN and global_step.eval(sess) >= PRELIMINARY_RANDOM_ACTIONS:
             # Calculate rewards for random sample of transitions from history
             # Get random sample
             history_size = len(history_d)
-            sample_indices = np.random.choice(range(history_size), HISTORY_RAND_SAMPLE_SIZE)
-            sample_transitions = np.take(history_d, sample_indices, axis=0)
+            sample_indices = np.random.choice(range(3, history_size-1), HISTORY_RAND_SAMPLE_SIZE)
 
             # Get each value in transitions
-            train_states = [sample_transition[0] for sample_transition in sample_transitions]
-            actions = [sample_transition[1] for sample_transition in sample_transitions]
-            rewards = [sample_transition[2] for sample_transition in sample_transitions]
-            next_states = [sample_transition[3] for sample_transition in sample_transitions]
-            terminal = [sample_transition[4] for sample_transition in sample_transitions]
+            train_states = []
+            actions = []
+            rewards = []
+            next_states = []
+            terminal = []
+            for sample_index in sample_indices:
+                prev_transitions = np.take(history_d, [sample_index-1, sample_index-2, sample_index-3], axis=0)
+                curr_transition = history_d[sample_index]
+                next_transition = history_d[sample_index+1]
+
+                curr_frames = [curr_transition[0]]
+                for prev_transition in prev_transitions:
+                    if prev_transition[3]:  # If terminal, pad frames
+                        for _ in range(4-len(curr_frames)):
+                            curr_frames.insert(0, curr_frames[0])
+                        break
+                    curr_frames.insert(0, prev_transition[0])
+
+                next_frames = [curr_transition[0], next_transition[0]]
+                for prev_transition in prev_transitions[:2]:
+                    if prev_transition[3]:  # If terminal, pad frames
+                        for _ in range(4 - len(next_frames)):
+                            next_frames.insert(0, next_frames[0])
+                        break
+                    next_frames.insert(0, prev_transition[0])
+
+                train_states.append(np.dstack(curr_frames))
+                next_states.append(np.dstack(next_frames))
+                actions.append(history_d[sample_index][1])
+                rewards.append(history_d[sample_index][2])
+                terminal.append(history_d[sample_index][3])
 
             # Calculate rewards
             train_y = sess.run(output, feed_dict={x_: train_states})
@@ -272,7 +291,6 @@ def run():
         # Reset if done
         if done:
             env.reset()
-            last_four_frames = []
             score = 0
 
 
