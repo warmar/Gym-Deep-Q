@@ -1,5 +1,4 @@
 import os
-from collections import deque
 import gym
 import gym_ple
 import tensorflow as tf
@@ -155,7 +154,7 @@ def run():
     summary_writer = tf.summary.FileWriter(SAVE_DIR + SAVE_SUBDIR, sess.graph)
 
     # Run Model
-    history_d = deque([[None, None, None, True]])  # Start with a single terminal transition
+    history_d = np.array([[None, None, None, True]])  # Start with a single terminal transition
 
     score = 0
     next_state = env.render(mode='rgb_array')  # Allows us to render the screen only once per step
@@ -204,9 +203,9 @@ def run():
         # Update history
         transition = [curr_state, action, reward, done]
 
-        history_d.append(transition)
+        history_d = np.append(history_d, [transition], axis=0)
         if len(history_d) > HISTORY_MAX_SIZE+3:
-            history_d.popleft()
+            np.delete(history_d, 0, axis=0)
 
         # Train
         if TRAIN and global_step.eval(sess) >= PRELIMINARY_RANDOM_ACTIONS:
@@ -244,9 +243,9 @@ def run():
 
                 train_states.append(np.dstack(curr_frames))
                 next_states.append(np.dstack(next_frames))
-                actions.append(history_d[sample_index][1])
-                rewards.append(history_d[sample_index][2])
-                terminal.append(history_d[sample_index][3])
+                actions.append(curr_transition[1])
+                rewards.append(curr_transition[2])
+                terminal.append(curr_transition[3])
 
             # Calculate rewards
             train_y = sess.run(output, feed_dict={x_: train_states})
