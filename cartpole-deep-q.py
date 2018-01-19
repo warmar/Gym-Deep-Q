@@ -205,7 +205,7 @@ def run():
 
         history_d = np.append(history_d, [transition], axis=0)
         if len(history_d) > HISTORY_MAX_SIZE+3:
-            np.delete(history_d, 0, axis=0)
+            history_d = np.delete(history_d, 0, axis=0)
 
         # Train
         if TRAIN and global_step.eval(sess) >= PRELIMINARY_RANDOM_ACTIONS:
