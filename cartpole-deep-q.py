@@ -19,7 +19,7 @@ HISTORY_RAND_SAMPLE_SIZE = 50
 SAVE_CHECKPOINT_STEP_NUM = 1000
 RENDER = False
 TRAIN = True
-RESUME_SUB_DIR = None
+RESUME_SUB_DIR = None  # Set to index of subdirectory e.g. '0/'
 
 # Create subfolder for each separate run
 if not os.path.exists(SAVE_DIR):
@@ -160,10 +160,10 @@ def run():
 
     # Run Model
     if RESUME_SUB_DIR is not None:
-        history_saves = sorted(os.listdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/'))
-        history_d = np.load(SAVE_DIR + SAVE_SUBDIR + 'saves/history/' + history_saves[0])
-        for history_file_name in history_saves[1:]:
-            history_d = np.append(history_d, np.load(SAVE_DIR + SAVE_SUBDIR + 'saves/history/' + history_file_name), axis=0)
+        history_saves = os.listdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/')
+        history_d = np.load(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d0.npy')
+        for i in range(1, len(history_saves)):
+             history_d = np.append(history_d, np.load(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i), axis=0)
     else:
         history_d = np.array([[None, None, None, True]])  # Start with a single terminal transition
 
@@ -219,88 +219,88 @@ def run():
             history_d = np.delete(history_d, 0, axis=0)
 
         # Train
-        if TRAIN and global_step.eval(sess) >= PRELIMINARY_RANDOM_ACTIONS:
-            # Calculate rewards for random sample of transitions from history
-            # Get random sample
-            history_size = len(history_d)
-            sample_indices = np.random.choice(range(3, history_size-1), HISTORY_RAND_SAMPLE_SIZE)
+        if TRAIN:
+            if global_step.eval(sess) >= PRELIMINARY_RANDOM_ACTIONS:
+                # Calculate rewards for random sample of transitions from history
+                # Get random sample
+                history_size = len(history_d)
+                sample_indices = np.random.choice(range(3, history_size-1), HISTORY_RAND_SAMPLE_SIZE)
 
-            # Get each value in transitions
-            train_states = []
-            actions = []
-            rewards = []
-            next_states = []
-            terminal = []
-            for sample_index in sample_indices:
-                prev_transitions = np.take(history_d, [sample_index-1, sample_index-2, sample_index-3], axis=0)
-                curr_transition = history_d[sample_index]
-                next_transition = history_d[sample_index+1]
+                # Get each value in transitions
+                train_states = []
+                actions = []
+                rewards = []
+                next_states = []
+                terminal = []
+                for sample_index in sample_indices:
+                    prev_transitions = np.take(history_d, [sample_index-1, sample_index-2, sample_index-3], axis=0)
+                    curr_transition = history_d[sample_index]
+                    next_transition = history_d[sample_index+1]
 
-                curr_frames = [curr_transition[0]]
-                for prev_transition in prev_transitions:
-                    if prev_transition[3]:  # If terminal, pad frames
-                        for _ in range(4-len(curr_frames)):
-                            curr_frames.insert(0, curr_frames[0])
-                        break
-                    curr_frames.insert(0, prev_transition[0])
+                    curr_frames = [curr_transition[0]]
+                    for prev_transition in prev_transitions:
+                        if prev_transition[3]:  # If terminal, pad frames
+                            for _ in range(4-len(curr_frames)):
+                                curr_frames.insert(0, curr_frames[0])
+                            break
+                        curr_frames.insert(0, prev_transition[0])
 
-                next_frames = [curr_transition[0], next_transition[0]]
-                for prev_transition in prev_transitions[:2]:
-                    if prev_transition[3]:  # If terminal, pad frames
-                        for _ in range(4 - len(next_frames)):
-                            next_frames.insert(0, next_frames[0])
-                        break
-                    next_frames.insert(0, prev_transition[0])
+                    next_frames = [curr_transition[0], next_transition[0]]
+                    for prev_transition in prev_transitions[:2]:
+                        if prev_transition[3]:  # If terminal, pad frames
+                            for _ in range(4 - len(next_frames)):
+                                next_frames.insert(0, next_frames[0])
+                            break
+                        next_frames.insert(0, prev_transition[0])
 
-                train_states.append(np.dstack(curr_frames))
-                next_states.append(np.dstack(next_frames))
-                actions.append(curr_transition[1])
-                rewards.append(curr_transition[2])
-                terminal.append(curr_transition[3])
+                    train_states.append(np.dstack(curr_frames))
+                    next_states.append(np.dstack(next_frames))
+                    actions.append(curr_transition[1])
+                    rewards.append(curr_transition[2])
+                    terminal.append(curr_transition[3])
 
-            # Calculate rewards
-            train_y = sess.run(output, feed_dict={x_: train_states})
-            next_predictions = sess.run(output, feed_dict={x_: next_states})
-            for i in range(HISTORY_RAND_SAMPLE_SIZE):
-                train_y[i][actions[i]] = rewards[i]
+                # Calculate rewards
+                train_y = sess.run(output, feed_dict={x_: train_states})
+                next_predictions = sess.run(output, feed_dict={x_: next_states})
+                for i in range(HISTORY_RAND_SAMPLE_SIZE):
+                    train_y[i][actions[i]] = rewards[i]
 
-                if not terminal[i]:
-                    train_y[i][actions[i]] += REWARD_GAMMA*max(next_predictions[i])
+                    if not terminal[i]:
+                        train_y[i][actions[i]] += REWARD_GAMMA*max(next_predictions[i])
 
-            # DEBUG INFO:
-            # print('predictions: ', predictions)
-            # print('y: ', train_y)
-            # print('action: ', action)
-            # print('reward: ', reward)
-            # print('Cost: ', sess.run(cost, feed_dict={x_: state_history, y_: y}))
+                # DEBUG INFO:
+                # print('predictions: ', predictions)
+                # print('y: ', train_y)
+                # print('action: ', action)
+                # print('reward: ', reward)
+                # print('Cost: ', sess.run(cost, feed_dict={x_: state_history, y_: y}))
 
-            # Perform train step
-            sess.run(train, feed_dict={x_: train_states, y_: train_y})
+                # Perform train step
+                sess.run(train, feed_dict={x_: train_states, y_: train_y})
 
-            # Add summary values
-            if global_step.eval(sess) % 5 == 0:
-                summary = sess.run(merged_summary, feed_dict={x_: train_states, y_: train_y})
-                summary_writer.add_summary(summary, global_step=global_step.eval(sess))
+                # Add summary values
+                if global_step.eval(sess) % 5 == 0:
+                    summary = sess.run(merged_summary, feed_dict={x_: train_states, y_: train_y})
+                    summary_writer.add_summary(summary, global_step=global_step.eval(sess))
 
-            if done:
-                summary = tf.Summary(value=[
-                    tf.Summary.Value(tag="score", simple_value=score),
-                ])
-                summary_writer.add_summary(summary, global_step=global_step.eval(sess))
+                if done:
+                    summary = tf.Summary(value=[
+                        tf.Summary.Value(tag="score", simple_value=score),
+                    ])
+                    summary_writer.add_summary(summary, global_step=global_step.eval(sess))
 
-        # Save variables and history
-        if global_step.eval(sess) % SAVE_CHECKPOINT_STEP_NUM == 0:
-            saver.save(sess, SAVE_DIR + SAVE_SUBDIR + 'saves/save.chkp')
+            # Save variables and history
+            if global_step.eval(sess) % SAVE_CHECKPOINT_STEP_NUM == 0:
+                saver.save(sess, SAVE_DIR + SAVE_SUBDIR + 'saves/save.chkp')
 
-            # Save history in chunks, deleting the oldest chunk with each save
-            history_saves = sorted(os.listdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/'))
-            i = len(history_saves)
-            if len(history_saves) == (HISTORY_MAX_SIZE/SAVE_CHECKPOINT_STEP_NUM):
-                os.remove(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d0.npy')
-                for i, history_file_name in enumerate(history_saves[1:]):
-                    os.rename(SAVE_DIR + SAVE_SUBDIR + 'saves/history/' + history_file_name, SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i)
-                i += 1
-            np.save(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i, history_d[-SAVE_CHECKPOINT_STEP_NUM:])
+                # Save history in chunks, deleting the oldest chunk with each save
+                history_saves = os.listdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/')
+                i = len(history_saves)
+                if len(history_saves) == (HISTORY_MAX_SIZE/SAVE_CHECKPOINT_STEP_NUM):
+                    os.remove(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d0.npy')
+                    for i in range(1, len(history_saves)):
+                        os.rename(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i, SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % (i-1))
+                np.save(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i, history_d[-SAVE_CHECKPOINT_STEP_NUM:])
 
         # Indicators
         if RENDER:
