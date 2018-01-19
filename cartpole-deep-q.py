@@ -50,13 +50,13 @@ image_shape = env.render(mode='rgb_array').shape
 
 # Define model functions
 def weight_variable(shape):
-  initial = tf.truncated_normal(shape, stddev=0.1)
-  return tf.Variable(initial)
+    initial = tf.truncated_normal(shape, stddev=0.1)
+    return tf.Variable(initial)
 
 
 def bias_variable(shape):
-  initial = tf.constant(0.1, shape=shape)
-  return tf.Variable(initial)
+    initial = tf.constant(0.1, shape=shape)
+    return tf.Variable(initial)
 
 
 def conv2d(x, w, stride):
@@ -191,7 +191,6 @@ def run():
         curr_state_representation = np.dstack(curr_four_frames)
 
         # --- Determine next action ---
-        action = None
         # Linearly scale chance of picking a random action
         random_chance = RANDOM_ACTION_START_RATE + (RANDOM_ACTION_END_RATE - RANDOM_ACTION_START_RATE) * (global_step.eval(sess) / TOTAL_STEPS)
 
