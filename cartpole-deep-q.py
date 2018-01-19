@@ -16,6 +16,7 @@ RANDOM_ACTION_END_RATE = 0.001
 TOTAL_STEPS = 5000000
 HISTORY_MAX_SIZE = 50000
 HISTORY_RAND_SAMPLE_SIZE = 50
+SAVE_CHECKPOINT_STEP_NUM = 1000
 RENDER = False
 TRAIN = True
 RESUME_SUB_DIR = None
@@ -28,6 +29,10 @@ i = 0
 while str(i) in runs:
     i += 1
 SAVE_SUBDIR = '%d/' % i
+if not os.path.exists(SAVE_DIR + SAVE_SUBDIR):
+    os.mkdir(SAVE_DIR + SAVE_SUBDIR)
+    os.mkdir(SAVE_DIR + SAVE_SUBDIR + 'saves/')
+    os.mkdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/')
 
 # If resuming, use RESUME_DIR
 if RESUME_SUB_DIR is not None:
@@ -154,7 +159,13 @@ def run():
     summary_writer = tf.summary.FileWriter(SAVE_DIR + SAVE_SUBDIR, sess.graph)
 
     # Run Model
-    history_d = np.array([[None, None, None, True]])  # Start with a single terminal transition
+    if RESUME_SUB_DIR is not None:
+        history_saves = sorted(os.listdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/'))
+        history_d = np.load(SAVE_DIR + SAVE_SUBDIR + 'saves/history/' + history_saves[0])
+        for history_file_name in history_saves[1:]:
+            history_d = np.append(history_d, np.load(SAVE_DIR + SAVE_SUBDIR + 'saves/history/' + history_file_name), axis=0)
+    else:
+        history_d = np.array([[None, None, None, True]])  # Start with a single terminal transition
 
     score = 0
     next_state = env.render(mode='rgb_array')  # Allows us to render the screen only once per step
@@ -204,7 +215,7 @@ def run():
         transition = [curr_state, action, reward, done]
 
         history_d = np.append(history_d, [transition], axis=0)
-        if len(history_d) > HISTORY_MAX_SIZE+3:
+        if len(history_d) > HISTORY_MAX_SIZE:
             history_d = np.delete(history_d, 0, axis=0)
 
         # Train
@@ -278,8 +289,19 @@ def run():
                 summary_writer.add_summary(summary, global_step=global_step.eval(sess))
 
             # Save variables
-            if global_step.eval(sess) % 100 == 0:
+
+            if global_step.eval(sess) % SAVE_CHECKPOINT_STEP_NUM == 0:
                 saver.save(sess, SAVE_DIR + SAVE_SUBDIR + 'saves/save.chkp')
+
+                # Save history in chunks, deleting the oldest chunk with each save
+                history_saves = sorted(os.listdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/'))
+                i = len(history_saves)
+                if len(history_saves) == (HISTORY_MAX_SIZE/SAVE_CHECKPOINT_STEP_NUM):
+                    os.remove(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d0.npy')
+                    for i, history_file_name in enumerate(history_saves[1:]):
+                        os.rename(SAVE_DIR + SAVE_SUBDIR + 'saves/history/' + history_file_name, SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i)
+                    i += 1
+                np.save(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i, history_d[-SAVE_CHECKPOINT_STEP_NUM:])
 
         # Indicators
         if RENDER:
