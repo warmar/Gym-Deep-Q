@@ -6,7 +6,7 @@ import numpy as np
 
 GYM_ENV = 'CartPole-v0'
 SAVE_DIR = './cartpole/'
-LEARNING_RATE = 1e-6
+LEARNING_RATE = 1e-5
 ACTIVATION_FUNCTION = tf.nn.relu
 REWARD_GAMMA = 0.95
 NUM_POSSIBLE_ACTIONS = 2
