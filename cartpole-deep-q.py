@@ -18,10 +18,10 @@ HISTORY_MAX_SIZE = 50000
 HISTORY_RAND_SAMPLE_SIZE = 50
 SAVE_CHECKPOINT_STEP_NUM = 1000
 RENDER = False
-TRAIN = True
+TRAIN = True  # True to train, False to run trained model
 RESUME_SUB_DIR = None  # Set to index of subdirectory e.g. '0/'
 
-# Create subfolder for each separate run
+# Determine index for current run
 if not os.path.exists(SAVE_DIR):
     os.mkdir(SAVE_DIR)
 runs = os.listdir(SAVE_DIR)
@@ -29,14 +29,16 @@ i = 0
 while str(i) in runs:
     i += 1
 SAVE_SUBDIR = '%d/' % i
-if not os.path.exists(SAVE_DIR + SAVE_SUBDIR):
-    os.mkdir(SAVE_DIR + SAVE_SUBDIR)
-    os.mkdir(SAVE_DIR + SAVE_SUBDIR + 'saves/')
-    os.mkdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/')
 
 # If resuming, use RESUME_DIR
 if RESUME_SUB_DIR is not None:
     SAVE_SUBDIR = RESUME_SUB_DIR
+
+# Create necessary directories
+if not os.path.exists(SAVE_DIR + SAVE_SUBDIR):
+    os.mkdir(SAVE_DIR + SAVE_SUBDIR)
+    os.mkdir(SAVE_DIR + SAVE_SUBDIR + 'saves/')
+    os.mkdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/')
 
 # Set random seeds for consistency
 tf.set_random_seed(1)
@@ -159,7 +161,7 @@ def run():
     summary_writer = tf.summary.FileWriter(SAVE_DIR + SAVE_SUBDIR, sess.graph)
 
     # Run Model
-    if RESUME_SUB_DIR is not None:
+    if TRAIN and RESUME_SUB_DIR is not None:
         history_saves = os.listdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/')
         history_d = np.load(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d0.npy')
         for i in range(1, len(history_saves)):
@@ -171,8 +173,6 @@ def run():
     next_state = env.render(mode='rgb_array')  # Allows us to render the screen only once per step
     next_state = sess.run(processed_images, feed_dict={raw_images: [next_state]})[0]
     while global_step.eval(sess) < TOTAL_STEPS:
-        sess.run(increment_global_step)
-
         # Get current screen array
         curr_state = next_state
 
@@ -194,8 +194,9 @@ def run():
         # Linearly scale chance of picking a random action
         random_chance = RANDOM_ACTION_START_RATE + (RANDOM_ACTION_END_RATE - RANDOM_ACTION_START_RATE) * (global_step.eval(sess) / TOTAL_STEPS)
 
-        # Pick random action if still in preliminary building replay memory stage, then occasionally after
-        if ((global_step.eval(sess) < PRELIMINARY_RANDOM_ACTIONS) or
+        # While training, pick random action if still in preliminary building replay memory stage, then occasionally after
+        if TRAIN and \
+                ((global_step.eval(sess) < PRELIMINARY_RANDOM_ACTIONS) or
                 (np.random.random_sample() < random_chance)):
             action = np.random.choice([0, 1])
         else:  # Otherwise pick action with highest predicted reward based on Q function
@@ -219,6 +220,7 @@ def run():
 
         # Train
         if TRAIN:
+            # Train only when replay memory is filled with enough random actions
             if global_step.eval(sess) >= PRELIMINARY_RANDOM_ACTIONS:
                 # Calculate rewards for random sample of transitions from history
                 # Get random sample
@@ -301,11 +303,14 @@ def run():
                         os.rename(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i, SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % (i-1))
                 np.save(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i, history_d[-SAVE_CHECKPOINT_STEP_NUM:])
 
-        # Indicators
+            # Increment Step
+            sess.run(increment_global_step)
+
+            if global_step.eval(sess) % 100 == 0:
+                print('Step: ', global_step.eval(sess))
+
         if RENDER:
             env.render(mode='human')
-        if global_step.eval(sess) % 100 == 0:
-            print('Step: ', global_step.eval(sess))
 
         # Reset if done
         if done:
