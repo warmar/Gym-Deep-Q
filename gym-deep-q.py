@@ -153,12 +153,13 @@ def run():
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
 
-    # Create Summary Writer
-    merged_summary = tf.summary.merge_all()
+    # Create saver and restore previous run if applicable
     saver = tf.train.Saver()
     if RESUME_SUB_DIR is not None:
         saver.restore(sess, SAVE_DIR + RESUME_SUB_DIR + 'saves/save.chkp')
-    summary_writer = tf.summary.FileWriter(SAVE_DIR + SAVE_SUBDIR, sess.graph)
+    if TRAIN:
+        merged_summary = tf.summary.merge_all()
+        summary_writer = tf.summary.FileWriter(SAVE_DIR + SAVE_SUBDIR, sess.graph)
 
     # Run Model
     if TRAIN and RESUME_SUB_DIR is not None:
