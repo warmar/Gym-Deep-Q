@@ -199,10 +199,10 @@ def run():
         if TRAIN and \
                 ((global_step.eval(sess) < PRELIMINARY_RANDOM_ACTIONS) or
                 (np.random.random_sample() < random_chance)):
-            action = np.random.choice([0, 1])
+            action = np.random.choice(range(NUM_POSSIBLE_ACTIONS))
         else:  # Otherwise pick action with highest predicted reward based on Q function
             predictions = sess.run(output, feed_dict={x_: [curr_state_representation]})[0]
-            action = 0 if predictions[0] > predictions[1] else 1  # Pick action with biggest predicted reward
+            action = np.argmax(predictions)  # Pick action with biggest predicted reward
 
         # Perform Action
         observation, reward, done, info = env.step(action)
