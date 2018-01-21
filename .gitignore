@@ -2,5 +2,6 @@
 .idea/*
 cartpole/*
 flappy/*
+mountain/*
 garbage/*
 *-checkpoint.ipynb
