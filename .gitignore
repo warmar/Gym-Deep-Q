@@ -3,5 +3,6 @@
 cartpole/*
 flappy/*
 mountain/*
+catcher/*
 garbage/*
 *-checkpoint.ipynb
