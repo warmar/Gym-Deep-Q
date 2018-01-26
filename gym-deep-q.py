@@ -315,6 +315,8 @@ def run():
 
         # Reset if done
         if done:
+            if not TRAIN:
+                print('End - Score: ', score)
             env.reset()
             score = 0
 
