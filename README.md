@@ -14,10 +14,10 @@ It uses a neural network with 3 convolutional layers and 2 fully connected layer
 3. Run gym-deep-q.py with python3
 
 # Requirements
-gym
-ple - https://github.com/ntasfi/PyGame-Learning-Environment
-gym_ple - https://github.com/lusob/gym-ple
-tensorflow
+- gym
+- ple - https://github.com/ntasfi/PyGame-Learning-Environment
+- gym_ple - https://github.com/lusob/gym-ple
+- tensorflow
 
 # Other Notes
 Some pre-trained models are located in the 'trained/' directory. They were run for arbitrary lengths of time and vary in fitness. You can run these models by setting SAVE_DIR to 'trained/' and RESUME_SUB_DIR to the subdirectory e.g. 'catcher/'
