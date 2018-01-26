@@ -22,6 +22,8 @@ tensorflow
 # Other Notes
 Some pre-trained models are located in the 'trained/' directory. They were run for arbitrary lengths of time and vary in fitness. You can run these models by setting SAVE_DIR to 'trained/' and RESUME_SUB_DIR to the subdirectory e.g. 'catcher/'
 
+Because the Flappy Bird agent was trained with the goal of a universally-applicable model, the background was not removed, and thus the performance can vary drastically between runs, depending on the random backgrounds, pipe colors, and bird colors.
+
 The strategy of filling the replay memory with some preliminary random actions was inspired by the GitHub repo at yenchenlin/DeepLearningFlappyBird [2].
 
 # Sources
