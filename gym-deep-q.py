@@ -281,7 +281,7 @@ def run():
                 sess.run(train, feed_dict={x_: train_states, y_: train_y})
 
                 # Add summary values
-                if global_step.eval(sess) % 5 == 0:
+                if global_step.eval(sess) % 25 == 0:
                     summary = sess.run(merged_summary, feed_dict={x_: train_states, y_: train_y})
                     summary_writer.add_summary(summary, global_step=global_step.eval(sess))
 
