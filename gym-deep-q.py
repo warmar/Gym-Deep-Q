@@ -1,3 +1,4 @@
+import time
 import os
 import gym
 import gym_ple
@@ -20,6 +21,7 @@ SAVE_CHECKPOINT_STEP_NUM = 1000
 RENDER = False
 TRAIN = True  # True to train, False to run trained model
 RESUME_SUB_DIR = None  # Set to index of subdirectory e.g. '0/'
+MAX_FPS = None
 
 # Determine index for current run
 if not os.path.exists(SAVE_DIR):
@@ -174,6 +176,7 @@ def run():
     next_state = env.render(mode='rgb_array')  # Allows us to render the screen only once per step
     next_state = sess.run(processed_images, feed_dict={raw_images: [next_state]})[0]
     while global_step.eval(sess) < TOTAL_STEPS:
+        start_time = time.time()
         # Get current screen array
         curr_state = next_state
 
@@ -319,6 +322,12 @@ def run():
                 print('End - Score: ', score)
             env.reset()
             score = 0
+
+        if MAX_FPS is not None:
+            duration = time.time()-start_time
+            remaining_tick_time = 1/MAX_FPS - duration
+            if remaining_tick_time > 0:
+                time.sleep(remaining_tick_time)
 
 
 run()
