@@ -5,4 +5,4 @@ flappy/*
 mountain/*
 catcher/*
 garbage/*
-*-checkpoint.ipynb
+.ipynb_checkpoints/*
