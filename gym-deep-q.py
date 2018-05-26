@@ -20,7 +20,8 @@ HISTORY_RAND_SAMPLE_SIZE = 50
 REWARD_GAMMA = 0.95
 TOTAL_STEPS = 5000000
 ACTIVATION_FUNCTION = tf.nn.relu
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-5
+
 
 # Determine index for current run
 if not os.path.exists(SAVE_DIR):
