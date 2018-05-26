@@ -306,7 +306,7 @@ class GymDeepQ:
                 # self.history_d.append(transition)
                 self.history_d = np.append(self.history_d, [transition], axis=0)
                 while len(self.history_d) > HISTORY_MAX_SIZE:
-                    np.delete(self.history_d, 0, axis=0)
+                    self.history_d = np.delete(self.history_d, 0, axis=0)
 
                 self.do_batch_train_step()
 
