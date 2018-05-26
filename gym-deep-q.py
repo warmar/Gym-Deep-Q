@@ -161,10 +161,7 @@ class GymDeepQ:
 
         history_saves = os.listdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/')
         for i in range(len(history_saves)):
-            k=time.time()
             self.history_d = np.append(self.history_d, np.load(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i), axis=0)
-            # self.history_d.extend(np.load(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i))
-            print('loading - ', time.time()-k)
 
     def process_image(self, image):
         processed_image = self.sess.run(self.processed_images, feed_dict={self.raw_images: [image]})[0]
@@ -270,7 +267,6 @@ class GymDeepQ:
 
     def run_model(self, train):
         if train:
-            # self.history_d = deque()
             self.history_d = np.array([[None, None, None, True],])  # Start with a single terminal transition
             if RESUME_SUB_DIR is not None:
                 self.restore_model()
