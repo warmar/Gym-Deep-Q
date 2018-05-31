@@ -6,7 +6,6 @@ import tensorflow as tf
 import numpy as np
 from collections import deque
 
-GPU_MEMORY_PERCENTAGE = 0.3
 GYM_ENV = 'FlappyBird-v0'
 SAVE_DIR = './flappy/'
 RESUME_SUB_DIR = None  # Set to index of subdirectory e.g. '0/'
@@ -21,7 +20,7 @@ HISTORY_RAND_SAMPLE_SIZE = 50
 REWARD_GAMMA = 0.9
 TOTAL_STEPS = 5000000
 ACTIVATION_FUNCTION = tf.nn.relu
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-5
 DOUBLE_Q = True
 UPDATE_TARGET_NETWORK_STEPS = 10000
 TAU = 1  # Rate to update target network
@@ -92,8 +91,7 @@ def fc_layer(x, out_size, activation_func, name):
 
 class GymDeepQ:
     def __init__(self):
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=GPU_MEMORY_PERCENTAGE)
-        self.sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+        self.sess = tf.Session()
         self._create_environment()
         self._build_model()
 
