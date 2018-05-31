@@ -21,7 +21,7 @@ REWARD_GAMMA = 0.9
 TOTAL_STEPS = 5000000
 ACTIVATION_FUNCTION = tf.nn.relu
 LEARNING_RATE = 1e-5
-DOUBLE_Q = True
+DOUBLE_Q = False
 UPDATE_TARGET_NETWORK_STEPS = 10000
 TAU = 1  # Rate to update target network
 
@@ -118,10 +118,11 @@ class GymDeepQ:
         return fc2
 
     def _q(self, x):
-        conv1 = conv_layer(x, filter_size=4, stride=4, out_channels=32, activation_func=ACTIVATION_FUNCTION, name='conv1')
-        conv2 = conv_layer(conv1, filter_size=4, stride=4, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv2')
+        conv1 = conv_layer(x, filter_size=4, stride=2, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv1')
+        conv2 = conv_layer(conv1, filter_size=4, stride=2, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv2')
+        conv3 = conv_layer(conv2, filter_size=4, stride=2, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv3')
 
-        last_conv = conv2
+        last_conv = conv3
 
         # Flatten image
         num_image_pixels = 1
