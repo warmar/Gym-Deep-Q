@@ -11,16 +11,19 @@ SAVE_DIR = './flappy/'
 RESUME_SUB_DIR = None  # Set to index of subdirectory e.g. '0/'
 MAX_FPS = None
 SAVE_CHECKPOINT_STEP_NUM = 1000
-SCALED_IMAGE_SIZE = 100
+SCALED_IMAGE_SIZE = 80
 NUM_POSSIBLE_ACTIONS = 2
 RANDOM_ACTION_START_RATE = 0.1
 RANDOM_ACTION_END_RATE = 0.001
-HISTORY_MAX_SIZE = 50000
+HISTORY_MAX_SIZE = 10000
 HISTORY_RAND_SAMPLE_SIZE = 50
-REWARD_GAMMA = 0.95
+REWARD_GAMMA = 0.9
 TOTAL_STEPS = 5000000
 ACTIVATION_FUNCTION = tf.nn.relu
-LEARNING_RATE = 1e-5
+LEARNING_RATE = 1e-3
+DOUBLE_Q = True
+UPDATE_TARGET_NETWORK_STEPS = 10000
+TAU = 1  # Rate to update target network
 
 
 # Determine index for current run
@@ -97,6 +100,58 @@ class GymDeepQ:
         self.env.reset()
         self.image_shape = self.env.render(mode='rgb_array').shape
 
+    def _q_old(self, x):
+        conv1 = conv_layer(x, filter_size=8, stride=4, out_channels=32, activation_func=ACTIVATION_FUNCTION, name='conv1')
+        conv2 = conv_layer(conv1, filter_size=4, stride=2, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv2')
+        conv3 = conv_layer(conv2, filter_size=3, stride=1, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv3')
+
+        # Flatten image
+        num_image_pixels = 1
+        for dimension in conv3.shape[1:]:
+            num_image_pixels *= int(dimension)
+        flattened = tf.reshape(conv3, [-1, num_image_pixels])
+
+        # Fully connected layers
+        fc1 = fc_layer(flattened, out_size=512, activation_func=ACTIVATION_FUNCTION, name='fc1')
+        fc2 = fc_layer(fc1, out_size=NUM_POSSIBLE_ACTIONS, activation_func=tf.identity, name='fc2')
+
+        return fc2
+
+    def _q(self, x):
+        conv1 = conv_layer(x, filter_size=4, stride=4, out_channels=32, activation_func=ACTIVATION_FUNCTION, name='conv1')
+        conv2 = conv_layer(conv1, filter_size=4, stride=4, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv2')
+
+        last_conv = conv2
+
+        # Flatten image
+        num_image_pixels = 1
+        for dimension in last_conv.shape[1:]:
+            num_image_pixels *= int(dimension)
+        flattened = tf.reshape(last_conv, [-1, num_image_pixels])
+
+        # Fully connected layers
+        fc1 = fc_layer(flattened, out_size=512, activation_func=ACTIVATION_FUNCTION, name='fc1')
+        fc2 = fc_layer(fc1, out_size=NUM_POSSIBLE_ACTIONS, activation_func=tf.identity, name='fc2')
+
+        return fc2
+
+    def _q_target_update_ops(self):
+        tf_vars = tf.trainable_variables()
+        total_vars = len(tf_vars)
+        op_holder = []
+        for idx, q_var in enumerate(tf_vars[0:total_vars // 2]):
+            q_target_var = tf_vars[idx + (total_vars // 2)]
+            op_holder.append(
+                q_target_var.assign(
+                    (q_var.value() * TAU) + ((1 - TAU) * q_target_var.value())
+                )
+            )
+        return op_holder
+
+    def _update_q_target(self):
+        for op in self.update_q_target_ops:
+            self.sess.run(op)
+
     def _build_model(self):
         # Build image processing graph
         self.raw_images = tf.placeholder(tf.float32, shape=[None, *self.image_shape])
@@ -117,29 +172,20 @@ class GymDeepQ:
         # Add input image summary
         tf.summary.image('x_image', self.x_)
 
-        # Convolutional Layers
-        conv1 = conv_layer(self.x_, filter_size=8, stride=4, out_channels=32, activation_func=ACTIVATION_FUNCTION, name='conv1')
-        conv2 = conv_layer(conv1, filter_size=4, stride=2, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv2')
-        conv3 = conv_layer(conv2, filter_size=3, stride=1, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv3')
+        self.q = self._q(self.x_)
+        if DOUBLE_Q:
+            with tf.name_scope('q_target'):
+                self.q_target = self._q(self.x_)
 
-        # Flatten image
-        num_image_pixels = 1
-        for dimension in conv3.shape[1:]:
-            num_image_pixels *= int(dimension)
-        flattened = tf.reshape(conv3, [-1, num_image_pixels])
-
-        # Fully connected layers
-        fc1 = fc_layer(flattened, out_size=512, activation_func=ACTIVATION_FUNCTION, name='fc1')
-        fc2 = fc_layer(fc1, out_size=NUM_POSSIBLE_ACTIONS, activation_func=tf.identity, name='fc2')
-
-        self.output = fc2
+            # Create q_target update ops
+            self.update_q_target_ops = self._q_target_update_ops()
 
         # Define cost function
-        cost = tf.reduce_mean(tf.square(self.output - self.y_))
+        cost = tf.reduce_mean(tf.square(self.q - self.y_))
         tf.summary.scalar('cost', cost)
 
         # Define average Q metric
-        avg_q = tf.reduce_mean(self.output)
+        avg_q = tf.reduce_mean(self.q)
         tf.summary.scalar('avg_q', avg_q)
 
         # Define train step
@@ -178,7 +224,7 @@ class GymDeepQ:
         if train and (np.random.random_sample() < random_chance):
             action = np.random.choice(range(NUM_POSSIBLE_ACTIONS))
         else:  # Otherwise pick action with highest predicted reward based on Q function
-            predictions = self.sess.run(self.output, feed_dict={self.x_: [state]})[0]
+            predictions = self.sess.run(self.q, feed_dict={self.x_: [state]})[0]
             action = np.argmax(predictions)  # Pick action with biggest predicted reward
 
         return action
@@ -227,8 +273,8 @@ class GymDeepQ:
             terminal.append(transitions[3][3])
 
         # Calculate rewards
-        train_y = self.sess.run(self.output, feed_dict={self.x_: train_states})
-        next_predictions = self.sess.run(self.output, feed_dict={self.x_: next_states})
+        train_y = self.sess.run(self.q, feed_dict={self.x_: train_states})
+        next_predictions = self.sess.run(self.q_target if DOUBLE_Q else self.q, feed_dict={self.x_: next_states})
         for i in range(HISTORY_RAND_SAMPLE_SIZE):
             train_y[i][actions[i]] = rewards[i]
 
@@ -300,12 +346,14 @@ class GymDeepQ:
             if train:
                 # Update history
                 transition = [curr_frame, action, reward, done]
-                # self.history_d.append(transition)
                 self.history_d = np.append(self.history_d, [transition], axis=0)
                 while len(self.history_d) > HISTORY_MAX_SIZE:
                     self.history_d = np.delete(self.history_d, 0, axis=0)
 
                 self.do_batch_train_step()
+                if DOUBLE_Q:
+                    if self.get_global_step() % UPDATE_TARGET_NETWORK_STEPS == 0:
+                        self._update_q_target()
 
                 # Write score summary if done
                 if done:
