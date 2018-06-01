@@ -13,12 +13,12 @@ MAX_FPS = None
 SAVE_CHECKPOINT_STEP_NUM = 1000
 SCALED_IMAGE_SIZE = 80
 NUM_POSSIBLE_ACTIONS = 2
-RANDOM_ACTION_START_RATE = 0.1
-RANDOM_ACTION_END_RATE = 0.001
-HISTORY_MAX_SIZE = 10000
+RANDOM_ACTION_START_RATE = 1
+RANDOM_ACTION_END_RATE = 0.01
+HISTORY_MAX_SIZE = 500000
 HISTORY_RAND_SAMPLE_SIZE = 50
 REWARD_GAMMA = 0.9
-TOTAL_STEPS = 5000000
+TOTAL_STEPS = 1000000
 ACTIVATION_FUNCTION = tf.nn.relu
 LEARNING_RATE = 1e-5
 DOUBLE_Q = False
@@ -118,11 +118,10 @@ class GymDeepQ:
         return fc2
 
     def _q(self, x):
-        conv1 = conv_layer(x, filter_size=4, stride=2, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv1')
-        conv2 = conv_layer(conv1, filter_size=4, stride=2, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv2')
-        conv3 = conv_layer(conv2, filter_size=4, stride=2, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv3')
+        conv1 = conv_layer(x, filter_size=8, stride=4, out_channels=16, activation_func=ACTIVATION_FUNCTION, name='conv1')
+        conv2 = conv_layer(conv1, filter_size=4, stride=2, out_channels=32, activation_func=ACTIVATION_FUNCTION, name='conv2')
 
-        last_conv = conv3
+        last_conv = conv2
 
         # Flatten image
         num_image_pixels = 1
@@ -131,7 +130,7 @@ class GymDeepQ:
         flattened = tf.reshape(last_conv, [-1, num_image_pixels])
 
         # Fully connected layers
-        fc1 = fc_layer(flattened, out_size=512, activation_func=ACTIVATION_FUNCTION, name='fc1')
+        fc1 = fc_layer(flattened, out_size=256, activation_func=ACTIVATION_FUNCTION, name='fc1')
         fc2 = fc_layer(fc1, out_size=NUM_POSSIBLE_ACTIONS, activation_func=tf.identity, name='fc2')
 
         return fc2
@@ -169,9 +168,6 @@ class GymDeepQ:
         # Build q function graph
         self.x_ = tf.placeholder(tf.float32, shape=[None, *(processed_images.shape[1:3]), 4])  # processed images placeholder
         self.y_ = tf.placeholder(tf.float32, shape=[None, NUM_POSSIBLE_ACTIONS])  # expected reward placeholder
-
-        # Add input image summary
-        tf.summary.image('x_image', self.x_)
 
         self.q = self._q(self.x_)
         if DOUBLE_Q:
