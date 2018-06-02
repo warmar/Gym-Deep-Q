@@ -1,10 +1,12 @@
-import time
 import os
+import pickle
+import time
+from collections import deque
+
 import gym
 import gym_ple
-import tensorflow as tf
 import numpy as np
-from collections import deque
+import tensorflow as tf
 
 GYM_ENV = 'FlappyBird-v0'
 SAVE_DIR = './flappy/'
@@ -40,10 +42,10 @@ if RESUME_SUB_DIR is not None:
     SAVE_SUBDIR = RESUME_SUB_DIR
 
 # Create necessary directories
-if not os.path.exists(SAVE_DIR + SAVE_SUBDIR):
-    os.mkdir(SAVE_DIR + SAVE_SUBDIR)
-    os.mkdir(SAVE_DIR + SAVE_SUBDIR + 'saves/')
-    os.mkdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/')
+if not os.path.exists(os.path.join(SAVE_DIR, SAVE_SUBDIR)):
+    os.mkdir(os.path.join(SAVE_DIR, SAVE_SUBDIR))
+    os.mkdir(os.path.join(SAVE_DIR, SAVE_SUBDIR, 'saves/'))
+    os.mkdir(os.path.join(SAVE_DIR, SAVE_SUBDIR, 'saves/history/'))
 
 # Set random seeds for consistency
 tf.set_random_seed(1)
@@ -180,14 +182,14 @@ class GymDeepQ:
 
         # Create summary writer
         self.merged_summary = tf.summary.merge_all()
-        self.summary_writer = tf.summary.FileWriter(SAVE_DIR + SAVE_SUBDIR, self.sess.graph)
+        self.summary_writer = tf.summary.FileWriter(os.path.join(SAVE_DIR, SAVE_SUBDIR), self.sess.graph)
 
     def restore_model(self):
-        self.saver.restore(self.sess, SAVE_DIR + RESUME_SUB_DIR + 'saves/save.chkp')
+        self.saver.restore(self.sess, os.path.join(SAVE_DIR, RESUME_SUB_DIR, 'saves/save.chkp'))
 
-        history_saves = os.listdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/')
+        history_saves = os.listdir(os.path.join(SAVE_DIR, SAVE_SUBDIR, 'saves/history/'))
         for i in range(len(history_saves)):
-            self.history_d = np.append(self.history_d, np.load(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i), axis=0)
+            self.history_d.extend(pickle.load(open(os.path.join(SAVE_DIR, SAVE_SUBDIR, 'saves/history/history_d%s.pickle' % i), 'rb')))
 
     def process_image(self, image):
         processed_image = self.sess.run(self.processed_images, feed_dict={self.raw_images: [image]})[0]
@@ -270,17 +272,18 @@ class GymDeepQ:
 
         # Save variables and history
         if self.get_global_step() % SAVE_CHECKPOINT_STEP_NUM == 0:
-            self.saver.save(self.sess, SAVE_DIR + SAVE_SUBDIR + 'saves/save.chkp')
+            self.saver.save(self.sess, os.path.join(SAVE_DIR, SAVE_SUBDIR, 'saves/save.chkp'))
 
             # Save history in chunks, deleting the oldest chunk with each save
-            history_saves = os.listdir(SAVE_DIR + SAVE_SUBDIR + 'saves/history/')
+            history_saves = os.listdir(os.path.join(SAVE_DIR, SAVE_SUBDIR, 'saves/history/'))
             i = len(history_saves)
             if len(history_saves) == (HISTORY_MAX_SIZE / SAVE_CHECKPOINT_STEP_NUM):
-                os.remove(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d0.npy')
+                os.remove(os.path.join(SAVE_DIR, SAVE_SUBDIR, 'saves/history/history_d0.pickle'))
                 for i in range(1, len(history_saves)):
-                    os.rename(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i,
-                              SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % (i - 1))
-            np.save(SAVE_DIR + SAVE_SUBDIR + 'saves/history/history_d%s.npy' % i, self.history_d[-SAVE_CHECKPOINT_STEP_NUM:])
+                    os.rename(os.path.join(SAVE_DIR, SAVE_SUBDIR, 'saves/history/history_d%s.pickle' % i),
+                              os.path.join(SAVE_DIR, SAVE_SUBDIR, 'saves/history/history_d%s.pickle' % (i - 1)))
+            pickle.dump(self.history_d[-SAVE_CHECKPOINT_STEP_NUM:],
+                        open(os.path.join(SAVE_DIR, SAVE_SUBDIR, 'saves/history/history_d%s.pickle' % i), 'wb'))
 
     def get_global_step(self):
         return self.sess.run(self.global_step)
@@ -293,7 +296,7 @@ class GymDeepQ:
 
     def run_model(self, train):
         if train:
-            self.history_d = np.array([[None, None, None, True],])  # Start with a single terminal transition
+            self.history_d = [[None, None, None, True],]  # Start with a single terminal transition
             if RESUME_SUB_DIR is not None:
                 self.restore_model()
 
@@ -325,9 +328,9 @@ class GymDeepQ:
             if train:
                 # Update history
                 transition = [curr_frame, action, reward, done]
-                self.history_d = np.append(self.history_d, [transition], axis=0)
+                self.history_d.append(transition)
                 while len(self.history_d) > HISTORY_MAX_SIZE:
-                    self.history_d = np.delete(self.history_d, 0, axis=0)
+                    self.history_d.pop(0)
 
                 self.do_batch_train_step()
                 if DOUBLE_Q:
