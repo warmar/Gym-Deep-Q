@@ -100,7 +100,7 @@ class GymDeepQ:
         self.env.reset()
         self.image_shape = self.env.render(mode='rgb_array').shape
 
-    def _q_old(self, x):
+    def _q(self, x):
         conv1 = conv_layer(x, filter_size=8, stride=4, out_channels=32, activation_func=ACTIVATION_FUNCTION, name='conv1')
         conv2 = conv_layer(conv1, filter_size=4, stride=2, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv2')
         conv3 = conv_layer(conv2, filter_size=3, stride=1, out_channels=64, activation_func=ACTIVATION_FUNCTION, name='conv3')
@@ -113,24 +113,6 @@ class GymDeepQ:
 
         # Fully connected layers
         fc1 = fc_layer(flattened, out_size=512, activation_func=ACTIVATION_FUNCTION, name='fc1')
-        fc2 = fc_layer(fc1, out_size=NUM_POSSIBLE_ACTIONS, activation_func=tf.identity, name='fc2')
-
-        return fc2
-
-    def _q(self, x):
-        conv1 = conv_layer(x, filter_size=8, stride=4, out_channels=16, activation_func=ACTIVATION_FUNCTION, name='conv1')
-        conv2 = conv_layer(conv1, filter_size=4, stride=2, out_channels=32, activation_func=ACTIVATION_FUNCTION, name='conv2')
-
-        last_conv = conv2
-
-        # Flatten image
-        num_image_pixels = 1
-        for dimension in last_conv.shape[1:]:
-            num_image_pixels *= int(dimension)
-        flattened = tf.reshape(last_conv, [-1, num_image_pixels])
-
-        # Fully connected layers
-        fc1 = fc_layer(flattened, out_size=256, activation_func=ACTIVATION_FUNCTION, name='fc1')
         fc2 = fc_layer(fc1, out_size=NUM_POSSIBLE_ACTIONS, activation_func=tf.identity, name='fc2')
 
         return fc2
